@@ -281,6 +281,22 @@ def main(triangle_side, point_count_A, point_count_B, point_count_C, seed=None):
     Returns:
         Dictionary with output geometry
     """
+    # Input validation with defaults
+    if triangle_side is None:
+        triangle_side = 50.0
+    if point_count_A is None:
+        point_count_A = 5
+    if point_count_B is None:
+        point_count_B = 5
+    if point_count_C is None:
+        point_count_C = 5
+    
+    # Ensure positive values
+    triangle_side = max(1.0, float(triangle_side))
+    point_count_A = max(1, int(point_count_A))
+    point_count_B = max(1, int(point_count_B))
+    point_count_C = max(1, int(point_count_C))
+    
     if seed is not None:
         random.seed(seed)
     
@@ -292,9 +308,9 @@ def main(triangle_side, point_count_A, point_count_B, point_count_C, seed=None):
     
     # Step 3: Populate points in each circle
     all_points = []
-    points_A = populate_points_in_circle(region_circles[0], int(point_count_A), seed_offset=0)
-    points_B = populate_points_in_circle(region_circles[1], int(point_count_B), seed_offset=1)
-    points_C = populate_points_in_circle(region_circles[2], int(point_count_C), seed_offset=2)
+    points_A = populate_points_in_circle(region_circles[0], point_count_A, seed_offset=0)
+    points_B = populate_points_in_circle(region_circles[1], point_count_B, seed_offset=1)
+    points_C = populate_points_in_circle(region_circles[2], point_count_C, seed_offset=2)
     
     all_points = [points_A, points_B, points_C]
     
@@ -341,14 +357,15 @@ def main(triangle_side, point_count_A, point_count_B, point_count_C, seed=None):
 # This section runs when the component executes in Grasshopper
 if __name__ == "__main__":
     try:
+        # Validate and provide defaults for Grasshopper inputs
+        ts = triangle_side if 'triangle_side' in dir() else None
+        pcA = point_count_A if 'point_count_A' in dir() else None
+        pcB = point_count_B if 'point_count_B' in dir() else None
+        pcC = point_count_C if 'point_count_C' in dir() else None
+        s = seed if 'seed' in dir() else None
+        
         # Call main function with Grasshopper inputs
-        result = main(
-            triangle_side,
-            point_count_A,
-            point_count_B,
-            point_count_C,
-            seed=seed if 'seed' in dir() else None
-        )
+        result = main(ts, pcA, pcB, pcC, seed=s)
         
         # Assign to Grasshopper output variables
         circles = result['region_circles']
