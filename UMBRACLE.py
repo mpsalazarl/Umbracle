@@ -145,43 +145,43 @@ def extract_boundary_segments(radial_circles, region_circles, region_index):
     
     for radial_circle in radial_circles:
         # Find intersection points between radial circle and region circle
-        intersections = rg.Intersect.Intersection.CircleCircle(
-            rg.Plane(rg.Point3d(0, 0, 0), rg.Vector3d.ZAxis),
-            region_circle,
-            rg.Plane(rg.Point3d(0, 0, 0), rg.Vector3d.ZAxis),
-            radial_circle
-        )
-        
-        if intersections is not None and intersections.Count >= 2:
-            # Two intersection points exist - extract arc between them
-            int_pt1 = intersections[0]
-            int_pt2 = intersections[1]
+        try:
+            intersections = rg.Intersect.Intersection.CircleCircle(
+                region_circle,
+                radial_circle
+            )
             
-            # Create arc from radial_circle between intersection points
-            try:
-                arc = rg.Arc(radial_circle, int_pt1, int_pt2)
-                if arc.IsValid:
-                    boundary_arcs.append(arc)
-            except:
-                pass
-        
-        elif intersections is not None and intersections.Count == 1:
-            # Tangent case - single intersection point
-            int_pt = intersections[0]
-            # Include small arc around tangent point
-            # Create arc from radial circle tangent
-            try:
-                # Create arc spanning both sides of tangent point
-                center_angle = 0.5  # radians
-                arc = rg.Arc(
-                    radial_circle,
-                    center_angle,
-                    center_angle + 0.1
-                )
-                if arc.IsValid:
-                    boundary_arcs.append(arc)
-            except:
-                pass
+            if intersections is not None and len(intersections) >= 2:
+                # Two intersection points exist - extract arc between them
+                int_pt1 = intersections[0]
+                int_pt2 = intersections[1]
+                
+                # Create arc from radial_circle between intersection points
+                try:
+                    arc = rg.Arc(radial_circle, int_pt1, int_pt2)
+                    if arc.IsValid:
+                        boundary_arcs.append(arc)
+                except:
+                    pass
+            
+            elif intersections is not None and len(intersections) == 1:
+                # Tangent case - single intersection point
+                # Include small arc around tangent point
+                try:
+                    # Create arc spanning both sides of tangent point
+                    center_angle = 0.5  # radians
+                    arc = rg.Arc(
+                        radial_circle,
+                        center_angle,
+                        center_angle + 0.1
+                    )
+                    if arc.IsValid:
+                        boundary_arcs.append(arc)
+                except:
+                    pass
+        except Exception as ex:
+            # Skip this circle if intersection fails
+            pass
     
     return boundary_arcs
 
