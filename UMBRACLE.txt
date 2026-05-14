@@ -11,11 +11,16 @@
 
 -------- Volume 
 
-1- Divide a curve in even numbers controlled by an input slider, make the distances non uniform depending on the proximity to the other curves (make the largest distance on the part that is close to the other ones) with an input slider for the starting point and another input for a domain for the minimum and maximum distance
-2- Divide the other curves following the same strategy
-3- Make a vertical lines from each point with a random height in a domain starts and ending from a  controlled input sliders
-4- 
-
+1- Divide the three curves given (contained in the xy plane) in even numbers (controlled by an input slider), make the distances between them non uniform depending on the proximity to the other curves (make the largest distance on the part that is close to the other ones) with an input slider for the starting point for the division and another input for a domain for the minimum and maximum distance
+2- Make a vertical line from each point with a random height in a domain starting and ending from input sliders. There will be a difference of 1m on the domain of each curve.
+3- Make a surface with the end points of this vertical lines (the ones that are not in the xy plane). U number will be 20
+4. Extend the surface following it is own curvature until it cuts the xy plane
+5. Make a Voronoi tesellation on the surface with the points you used to build the surface
+6. Take the edges of the Voronoi tesellation and offset them in the surface, distance given by an slider.
+7. Create the surface between the original edges and the offset ones
+8. Extrude this surface a distance controlled with an slider
+9. Divide the vertical lines (in step 2) in three parts. Take the point that is 2/3 height and join it with the vertices of the Voronoi face that is closer to it.
+10. Make multipipe with these lines that you have just drawn.
 
 
 ------- Kinetic Thing
