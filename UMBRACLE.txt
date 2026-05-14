@@ -1,0 +1,23 @@
+-------- Area
+
+1- start creating 3 circles of 70sqm, disposed on an equilateral triangle, the circles could be intersected, this intersection could be controled defining the side of the triangle
+2- populate this circles, each one of them with a number of points that can  be controlled by sliders imputed on A, B, and C.
+3- draw a circle from the center of each point, from each circular region, with radious that goes randomly from 2 to 5 meters.
+4- draw the boundary of all of this circles inside of each circular region, make the curve/curve intersection of this circles, and keep the segments of the ones that are on the boundary.
+5- create a continous curve from this circular sections, smoothing the joins with a fillet
+
+
+
+
+-------- Volume 
+
+1- Divide a curve in even numbers controlled by an input slider, make the distances non uniform depending on the proximity to the other curves (make the largest distance on the part that is close to the other ones) with an input slider for the starting point and another input for a domain for the minimum and maximum distance
+2- Divide the other curves following the same strategy
+3- Make a vertical lines from each point with a random height in a domain starts and ending from a  controlled input sliders
+4- 
+
+
+
+------- Kinetic Thing
+
+
