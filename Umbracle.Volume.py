@@ -67,12 +67,18 @@ def compute_proximity_field(curves, curve_index, sample_count=100):
         List of proximity values (one per sample point), normalized 0-1
     """
     if len(curves) != 3:
-        raise ValueError("Expected exactly 3 curves")
+        raise ValueError("Expected exactly 3 curves, got {}".format(len(curves)))
     
     source_curve = curves[curve_index]
     other_curves = [c for i, c in enumerate(curves) if i != curve_index]
     
-    source_length = source_curve.GetLength()
+    # Validate curve methods exist
+    try:
+        source_length = source_curve.GetLength()
+        domain = source_curve.Domain
+    except Exception as e:
+        raise ValueError("Source curve invalid: {}".format(str(e)))
+    
     proximities = []
     min_dist_global = float('inf')
     max_dist_global = 0.0
@@ -81,24 +87,41 @@ def compute_proximity_field(curves, curve_index, sample_count=100):
     distances_raw = []
     for i in range(sample_count):
         t_param = i / float(sample_count - 1) if sample_count > 1 else 0.5
-        t = source_curve.Domain.Min + t_param * (source_curve.Domain.Max - source_curve.Domain.Min)
-        source_pt = source_curve.PointAt(t)
+        t = domain.Min + t_param * (domain.Max - domain.Min)
+        try:
+            source_pt = source_curve.PointAt(t)
+        except:
+            # Skip invalid parameter
+            distances_raw.append(0.0)
+            continue
         
         min_dist_at_point = float('inf')
         for other_curve in other_curves:
-            cc, pt_on_curve = other_curve.ClosestPoint(source_pt)
-            dist = source_pt.DistanceTo(pt_on_curve)
-            min_dist_at_point = min(min_dist_at_point, dist)
+            try:
+                cc, pt_on_curve = other_curve.ClosestPoint(source_pt)
+                if pt_on_curve is not None:
+                    dist = source_pt.DistanceTo(pt_on_curve)
+                    min_dist_at_point = min(min_dist_at_point, dist)
+            except:
+                pass
         
-        distances_raw.append(min_dist_at_point)
-        min_dist_global = min(min_dist_global, min_dist_at_point)
-        max_dist_global = max(max_dist_global, min_dist_at_point)
+        if min_dist_at_point < float('inf'):
+            distances_raw.append(min_dist_at_point)
+            min_dist_global = min(min_dist_global, min_dist_at_point)
+            max_dist_global = max(max_dist_global, min_dist_at_point)
     
     # Normalize to 0-1
-    dist_range = max_dist_global - min_dist_global if max_dist_global > min_dist_global else 1.0
-    proximities = [(d - min_dist_global) / dist_range for d in distances_raw]
+    if len(distances_raw) == 0:
+        return [0.5] * sample_count  # Default if all distances failed
     
-    return proximities
+    dist_range = max_dist_global - min_dist_global if max_dist_global > min_dist_global else 1.0
+    proximities = [(d - min_dist_global) / dist_range if d < float('inf') else 0.5 for d in distances_raw]
+    
+    # Pad to sample_count if needed
+    while len(proximities) < sample_count:
+        proximities.append(0.5)
+    
+    return proximities[:sample_count]
 
 
 def adaptive_curve_divide(curve, division_count, proximity_field, min_distance, 
@@ -120,33 +143,43 @@ def adaptive_curve_divide(curve, division_count, proximity_field, min_distance,
     if division_count < 2:
         raise ValueError("Division count must be at least 2")
     
-    curve_length = curve.GetLength()
+    if not proximity_field or len(proximity_field) == 0:
+        raise ValueError("Proximity field is empty")
+    
     domain = curve.Domain
     
-    # Build cumulative arc-length parametrization
+    # Build cumulative arc-length parametrization using proximity field
     arc_lengths = [0.0]
     for i in range(1, len(proximity_field)):
         # Distance contribution weighted by proximity (reverse: close → max spacing, far → min spacing)
-        prox = proximity_field[i]
+        prox = proximity_field[i] if i < len(proximity_field) else 0.5
         spacing_factor = min_distance + (max_distance - min_distance) * (1.0 - prox)
         arc_lengths.append(arc_lengths[-1] + spacing_factor)
     
     # Normalize arc lengths and remap to 0-1 parameter range
-    total_arc = arc_lengths[-1]
-    normalized_arc = [a / total_arc for a in arc_lengths] if total_arc > 0 else [i / (len(proximity_field) - 1) for i in range(len(proximity_field))]
+    total_arc = arc_lengths[-1] if len(arc_lengths) > 0 else 1.0
+    if total_arc < TOLERANCE:
+        total_arc = 1.0
     
-    # Generate division points
+    normalized_arc = [a / total_arc for a in arc_lengths]
+    
+    # Generate division points using linear interpolation in parameter space
     division_points = []
     for i in range(division_count):
-        # Linear interpolation within normalized arc space
-        t_normalized = start_param_offset + (i / (division_count - 1)) * (1.0 - start_param_offset) if division_count > 1 else 0.5
+        # Linear parameter from 0 to 1 (or adjusted by start_param_offset)
+        if division_count > 1:
+            t_normalized = start_param_offset + (i / (division_count - 1)) * (1.0 - start_param_offset)
+        else:
+            t_normalized = 0.5
+        
+        t_normalized = max(0.0, min(1.0, t_normalized))  # Clamp to 0-1
         
         # Find corresponding arc-length parameter
         idx_lower = int(t_normalized * (len(normalized_arc) - 1))
         idx_upper = min(idx_lower + 1, len(normalized_arc) - 1)
         
-        if idx_lower == idx_upper:
-            arc_param = normalized_arc[idx_lower]
+        if idx_lower == idx_upper or len(normalized_arc) <= 1:
+            arc_param = normalized_arc[0] if len(normalized_arc) > 0 else 0.0
         else:
             frac = (t_normalized * (len(normalized_arc) - 1) - idx_lower)
             arc_param = normalized_arc[idx_lower] * (1 - frac) + normalized_arc[idx_upper] * frac
@@ -155,8 +188,15 @@ def adaptive_curve_divide(curve, division_count, proximity_field, min_distance,
         t_param = domain.Min + arc_param * (domain.Max - domain.Min)
         t_param = max(domain.Min, min(domain.Max, t_param))  # Clamp to domain
         
-        pt = curve.PointAt(t_param)
-        division_points.append(pt)
+        try:
+            pt = curve.PointAt(t_param)
+            division_points.append(pt)
+        except Exception as e:
+            # Skip points that fail
+            pass
+    
+    if len(division_points) == 0:
+        raise ValueError("Failed to generate any division points")
     
     return division_points
 
@@ -747,10 +787,24 @@ def generate_volume_phase(input_curves, divisions, start_param_offset, min_dista
                 outputs['division_points'].extend(div_points)
             except Exception as e:
                 outputs['errors'].append(f"Phase 1 Error (curve {curve_idx}): {str(e)}")
-                division_points_list.append([])
+                # Create fallback: simple parametric division without proximity
+                try:
+                    domain = curve.Domain
+                    fallback_points = []
+                    for i in range(divisions):
+                        t = domain.Min + (i / (divisions - 1)) * (domain.Max - domain.Min) if divisions > 1 else 0.5
+                        fallback_points.append(curve.PointAt(t))
+                    division_points_list.append(fallback_points)
+                    outputs['division_points'].extend(fallback_points)
+                    outputs['errors'].append(f"Phase 1: Using fallback uniform division for curve {curve_idx}")
+                except Exception as e2:
+                    outputs['errors'].append(f"Phase 1 Fallback Error (curve {curve_idx}): {str(e2)}")
+                    division_points_list.append([])
         
-        if not division_points_list or not all(division_points_list):
-            raise Exception("Failed to generate division points")
+        if not division_points_list or not any(division_points_list):
+            outputs['errors'].append("ERROR: Failed to generate division points on any curve")
+        else:
+            outputs['errors'].append(f"Phase 1: Generated division points on {sum(1 for p in division_points_list if p)} curves")
         
         # PHASE 2: Vertical Lines
         try:
@@ -758,68 +812,105 @@ def generate_volume_phase(input_curves, divisions, start_param_offset, min_dista
                 division_points_list, min_height, max_height
             )
             outputs['vertical_lines'] = lines
+            outputs['errors'].append(f"Phase 2: Generated {len(lines)} vertical lines")
         except Exception as e:
             outputs['errors'].append(f"Phase 2 Error: {str(e)}")
-            raise
+            # Fallback: create empty vertical lines list to continue
+            start_pts = []
+            end_pts = []
         
         # PHASE 3: Lofted Surface
         try:
-            endpoint_curves = create_endpoint_curves(
-                [end_pts for _ in range(len(division_points_list))]
-            )
-            # Regroup endpoints by original curve
-            endpoint_groups = []
-            pts_per_curve = len(end_pts) // len(division_points_list)
-            for i in range(len(division_points_list)):
-                start_idx = i * pts_per_curve
-                end_idx = start_idx + pts_per_curve
-                endpoint_groups.append(end_pts[start_idx:end_idx])
-            
-            endpoint_curves = create_endpoint_curves(endpoint_groups)
-            lofted = create_lofted_surface(endpoint_curves, LOFT_U_COUNT)
-            outputs['lofted_surface'] = lofted
+            if end_pts and len(end_pts) > 0:
+                # Regroup endpoints by their source curve for lofting
+                endpoint_groups = [[] for _ in range(len(division_points_list))]
+                current_idx = 0
+                
+                for curve_idx, div_points in enumerate(division_points_list):
+                    for _ in div_points:
+                        if current_idx < len(end_pts):
+                            endpoint_groups[curve_idx].append(end_pts[current_idx])
+                            current_idx += 1
+                
+                # Create interpolated curves through endpoints of each original curve
+                endpoint_curves = create_endpoint_curves(endpoint_groups)
+                if endpoint_curves and len(endpoint_curves) >= 3:
+                    lofted = create_lofted_surface(endpoint_curves, LOFT_U_COUNT)
+                    outputs['lofted_surface'] = lofted
+                    outputs['errors'].append(f"Phase 3: Created lofted surface with {len(endpoint_curves)} curves")
+                else:
+                    outputs['errors'].append(f"Phase 3: Could not create endpoint curves (got {len(endpoint_curves) if endpoint_curves else 0})")
+            else:
+                outputs['errors'].append("Phase 3: Skipped (no endpoint data from Phase 2)")
         except Exception as e:
             outputs['errors'].append(f"Phase 3 Error: {str(e)}")
-            lofted = None
         
         # PHASE 4: Extended Surface
         try:
-            if lofted:
-                extended = extend_surface_to_plane(lofted, Z_PLANE)
+            if outputs['lofted_surface']:
+                extended = extend_surface_to_plane(outputs['lofted_surface'], Z_PLANE)
                 outputs['extended_surface'] = extended
+                outputs['errors'].append("Phase 4: Extended surface to XY plane")
+            else:
+                outputs['errors'].append("Phase 4: Skipped (no lofted surface)")
         except Exception as e:
             outputs['errors'].append(f"Phase 4 Error: {str(e)}")
         
         # PHASE 5: Voronoi Tesellation (Simplified)
         try:
-            voronoi_cells = compute_voronoi_3d_simplified(end_pts)
-            outputs['voronoi_cells'] = voronoi_cells
+            if end_pts and len(end_pts) > 0:
+                voronoi_cells = compute_voronoi_3d_simplified(end_pts)
+                outputs['voronoi_cells'] = voronoi_cells
+                outputs['errors'].append(f"Phase 5: Generated {len(voronoi_cells)} Voronoi cells from {len(end_pts)} seed points")
+            else:
+                outputs['errors'].append("Phase 5: Skipped (no seed points)")
         except Exception as e:
             outputs['errors'].append(f"Phase 5 Error: {str(e)}")
         
         # PHASES 6-8: Edge Offsetting and Extrusion (Simplified Placeholder)
-        if lofted and voronoi_cells:
-            try:
+        try:
+            if outputs['lofted_surface'] and outputs['voronoi_cells']:
+                endpoint_curves = []
+                if len(division_points_list) == 3:
+                    try:
+                        endpoint_groups = [[] for _ in range(3)]
+                        current_idx = 0
+                        for curve_idx, div_points in enumerate(division_points_list):
+                            for _ in div_points:
+                                if current_idx < len(end_pts):
+                                    endpoint_groups[curve_idx].append(end_pts[current_idx])
+                                    current_idx += 1
+                        endpoint_curves = create_endpoint_curves(endpoint_groups)
+                    except:
+                        pass
+                
                 # Create dummy offset and wall surfaces for demonstration
                 for i in range(min(3, len(endpoint_curves))):
                     if i < len(endpoint_curves):
-                        offset = offset_curve_on_surface(
-                            endpoint_curves[i], lofted, voronoi_offset
-                        )
-                        if offset:
-                            outputs['offset_edges'].append(offset)
-                            
-                            wall = create_wall_surface(endpoint_curves[i], offset)
-                            if wall:
-                                outputs['wall_surfaces'].append(wall)
+                        try:
+                            offset = offset_curve_on_surface(
+                                endpoint_curves[i], outputs['lofted_surface'], voronoi_offset
+                            )
+                            if offset:
+                                outputs['offset_edges'].append(offset)
                                 
-                                extruded = extrude_surface(wall, extrusion_distance)
-                                outputs['final_extrusions'].extend(extruded)
-            except Exception as e:
-                outputs['errors'].append(f"Phases 6-8 Error: {str(e)}")
+                                wall = create_wall_surface(endpoint_curves[i], offset)
+                                if wall:
+                                    outputs['wall_surfaces'].append(wall)
+                                    
+                                    extruded = extrude_surface(wall, extrusion_distance)
+                                    outputs['final_extrusions'].extend(extruded)
+                        except Exception as e:
+                            outputs['errors'].append(f"Phase 6-8 Error (edge {i}): {str(e)}")
+                
+                outputs['errors'].append(f"Phase 6-8: Generated {len(outputs['offset_edges'])} offset edges, {len(outputs['wall_surfaces'])} walls, {len(outputs['final_extrusions'])} extrusions")
+            else:
+                outputs['errors'].append("Phase 6-8: Skipped (missing surface or Voronoi cells)")
+        except Exception as e:
+            outputs['errors'].append(f"Phase 6-8 Critical Error: {str(e)}")
     
     except Exception as e:
-        outputs['errors'].append(f"Critical Error: {str(e)}")
+        outputs['errors'].append(f"Critical Error in main loop: {str(e)}")
     
     return outputs
 
@@ -828,41 +919,145 @@ def generate_volume_phase(input_curves, divisions, start_param_offset, min_dista
 # GRASSHOPPER INTEGRATION
 # ==============================================================================
 
-if __name__ == "__main__":
-    # Validate inputs
-    input_curves = input_curves if 'input_curves' in dir() else []
-    divisions = int(max(2, min(50, divisions))) if 'divisions' in dir() else 20
-    start_param_offset = float(max(0, min(1, start_param_offset))) if 'start_param_offset' in dir() else 0.0
-    min_distance = float(max(0.1, min_distance)) if 'min_distance' in dir() else 2.0
-    max_distance = float(max(min_distance + 0.1, max_distance)) if 'max_distance' in dir() else 10.0
-    min_height = float(max(0.1, min_height)) if 'min_height' in dir() else 5.0
-    max_height = float(max(min_height + 0.1, max_height)) if 'max_height' in dir() else 50.0
-    voronoi_offset = float(max(0.1, voronoi_offset)) if 'voronoi_offset' in dir() else 1.0
-    extrusion_distance = float(max(0.1, extrusion_distance)) if 'extrusion_distance' in dir() else 5.0
+def normalize_curves_input():
+    """Normalize curve inputs from Grasshopper to a list of 3 curves."""
+    curves = []
+    debug_info = []
     
-    # Generate volume geometry
-    if len(input_curves) >= 3:
-        results = generate_volume_phase(
-            input_curves[:3],  # Use first 3 curves
-            divisions,
-            start_param_offset,
-            min_distance,
-            max_distance,
-            min_height,
-            max_height,
-            voronoi_offset,
-            extrusion_distance
-        )
+    # Method 1: Check for input_curves parameter (list/single)
+    if 'input_curves' in dir():
+        try:
+            val = input_curves  # Direct reference, not eval
+            debug_info.append("Found input_curves: type={}".format(type(val).__name__))
+            
+            # Check if it's iterable
+            if isinstance(val, (list, tuple)):
+                debug_info.append("  -> It's a list/tuple with {} items".format(len(val)))
+                curves = [c for c in val if c is not None]
+                debug_info.append("  -> After filtering None: {} valid curves".format(len(curves)))
+            elif hasattr(val, '__iter__') and not isinstance(val, str):
+                debug_info.append("  -> It's iterable but not list/tuple")
+                curves = [c for c in val if c is not None]
+                debug_info.append("  -> After filtering None: {} valid curves".format(len(curves)))
+            elif val is not None:
+                debug_info.append("  -> It's a single object")
+                curves = [val]
+        except Exception as e:
+            debug_info.append("ERROR in input_curves: {}".format(str(e)))
+    else:
+        debug_info.append("input_curves not found in dir()")
+    
+    # Method 2: Check for individual curve inputs (curveA, curveB, curveC, etc.)
+    if len(curves) < 3:
+        curve_vars = ['curveA', 'curveB', 'curveC', 'curve_A', 'curve_B', 'curve_C',
+                      'curves_A', 'curves_B', 'curves_C', 'curve1', 'curve2', 'curve3',
+                      'x', 'y', 'z']  # Common parameter names in Grasshopper
+        for var in curve_vars:
+            if var in dir() and len(curves) < 3:
+                try:
+                    val = eval(var)
+                    if val is None:
+                        continue
+                    if isinstance(val, (list, tuple)):
+                        curves.extend([c for c in val if c is not None])
+                        debug_info.append("Found {}: list with {} items".format(var, len(val)))
+                    else:
+                        curves.append(val)
+                        debug_info.append("Found {}: single object".format(var))
+                except:
+                    pass
+    
+    # Filter to only valid curves (check if they have necessary methods)
+    valid_curves = []
+    for idx, c in enumerate(curves[:3]):
+        try:
+            # Test if it's a valid Rhino Curve by checking for essential methods
+            if hasattr(c, 'PointAt') and hasattr(c, 'GetLength') and hasattr(c, 'Domain'):
+                valid_curves.append(c)
+                debug_info.append("Curve {} is valid".format(idx))
+            else:
+                debug_info.append("Curve {} missing methods: PointAt={}, GetLength={}, Domain={}".format(
+                    idx, hasattr(c, 'PointAt'), hasattr(c, 'GetLength'), hasattr(c, 'Domain')))
+        except Exception as e:
+            debug_info.append("Curve {} validation error: {}".format(idx, str(e)))
+    
+    debug_info.append("RESULT: {} valid curves detected".format(len(valid_curves)))
+    return valid_curves, debug_info
+
+
+if __name__ == "__main__":
+    # Initialize outputs
+    division_points = []
+    vertical_lines = []
+    lofted_surface = None
+    extended_surface = None
+    voronoi_edges = []
+    offset_edges = []
+    wall_surfaces = []
+    final_extrusions = []
+    error_messages = ""
+    
+    try:
+        # STEP 1: Get input curves
+        curves = []
+        if 'input_curves' in dir():
+            if isinstance(input_curves, (list, tuple)):
+                curves = list(input_curves)
+            else:
+                curves = [input_curves]
         
-        # Output to Grasshopper
-        division_points = results['division_points']
-        vertical_lines = results['vertical_lines']
-        lofted_surface = results['lofted_surface']
-        extended_surface = results['extended_surface']
-        voronoi_edges = results['voronoi_edges']
-        offset_edges = results['offset_edges']
-        wall_surfaces = results['wall_surfaces']
-        final_extrusions = results['final_extrusions']
+        error_messages = "DEBUG: Found {} curves\n".format(len(curves))
         
-        if results['errors']:
-            error_messages = "\n".join(results['errors'])
+        if len(curves) < 3:
+            error_messages += "ERROR: Need 3 curves, got {}".format(len(curves))
+        else:
+            # STEP 2: Simple division of curves  
+            div_count = int(divisions) if 'divisions' in dir() else 10
+            error_messages += "DEBUG: div_count = {}\n".format(div_count)
+            
+            for curve_idx, curve in enumerate(curves[:3]):
+                try:
+                    domain = curve.Domain
+                    error_messages += "Curve {}: domain min={}, max={}\n".format(curve_idx, domain.Min, domain.Max)
+                    
+                    for i in range(div_count):
+                        t = domain.Min + (i / (div_count - 1)) * (domain.Max - domain.Min) if div_count > 1 else 0.5
+                        pt = curve.PointAt(t)
+                        division_points.append(pt)
+                        error_messages += "  Point {}: ({}, {}, {})\n".format(i, pt.X, pt.Y, pt.Z)
+                except Exception as e:
+                    error_messages += "ERROR Curve {}: {}\n".format(curve_idx, str(e))
+            
+            error_messages += "\nSUCCESS: Generated {} division points from {} curves".format(len(division_points), len(curves))
+            
+            # TODO: PHASE 2 - Vertical lines (commented out for now)
+            # vertical_lines = []
+            # TODO: PHASE 3 - Lofted surface (commented out for now)
+            # lofted_surface = None
+            # TODO: PHASE 4 - Extended surface (commented out for now)
+            # extended_surface = None
+            # TODO: PHASE 5 - Voronoi edges (commented out for now)
+            # voronoi_edges = []
+            # TODO: PHASE 6 - Offset edges (commented out for now)
+            # offset_edges = []
+            # TODO: PHASE 7 - Wall surfaces (commented out for now)
+            # wall_surfaces = []
+            # TODO: PHASE 8 - Final extrusions (commented out for now)
+            # final_extrusions = []
+    
+    except Exception as e:
+        import traceback
+        error_messages = "CRITICAL: {}\n{}".format(str(e), traceback.format_exc())
+else:
+    # Fallback if not in main
+    division_points = []
+    vertical_lines = []
+    lofted_surface = None
+    extended_surface = None
+    voronoi_edges = []
+    offset_edges = []
+    wall_surfaces = []
+    final_extrusions = []
+    error_messages = "Not in main context"
+
+
