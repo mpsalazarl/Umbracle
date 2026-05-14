@@ -20,7 +20,7 @@
 7. Create the surface between the original edges and the offset ones
 8. Extrude this surface a distance controlled with an slider
 9. Divide the vertical lines (in step 2) in three parts. Take the point that is 2/3 height and join it with the vertices of the Voronoi face that is closer to it.
-10. 
+10. Make multipipe with these lines that you have just drawn.
 
 
 ------- Kinetic Thing
