@@ -138,52 +138,80 @@ def extract_boundary_segments(radial_circles, region_circles, region_index):
         region_index: Index (0, 1, or 2) indicating which region these radial circles belong to
         
     Returns:
-        List of Arc3d objects representing boundary segments
+        List of Curve objects representing boundary segments
     """
-    boundary_arcs = []
+    boundary_curves = []
     region_circle = region_circles[region_index]
     
     for radial_circle in radial_circles:
-        # Find intersection points between radial circle and region circle
         try:
+            # Find intersection points between radial circle and region circle boundary
             intersections = rg.Intersect.Intersection.CircleCircle(
                 region_circle,
                 radial_circle
             )
             
-            if intersections is not None and len(intersections) >= 2:
-                # Two intersection points exist - extract arc between them
+            if intersections is None or len(intersections) == 0:
+                # No intersection - radial circle might be entirely inside or outside
+                # Check if radial circle center is inside region
+                dist_to_region_center = radial_circle.Center.DistanceTo(region_circle.Center)
+                if dist_to_region_center < region_circle.Radius:
+                    # Center is inside - include partial arc
+                    try:
+                        arc_curve = rg.ArcCurve(rg.Arc(radial_circle, math.pi))
+                        boundary_curves.append(arc_curve)
+                    except:
+                        pass
+                continue
+            
+            if len(intersections) >= 2:
+                # Two intersection points - extract arc segment between them
                 int_pt1 = intersections[0]
                 int_pt2 = intersections[1]
                 
-                # Create arc from radial_circle between intersection points
                 try:
+                    # Create arc from radial circle between intersection points
                     arc = rg.Arc(radial_circle, int_pt1, int_pt2)
-                    if arc.IsValid:
-                        boundary_arcs.append(arc)
+                    if arc.IsValid and arc.Radius > 0:
+                        # Convert to curve
+                        arc_curve = rg.ArcCurve(arc)
+                        boundary_curves.append(arc_curve)
                 except:
-                    pass
+                    # If arc creation fails, try the other direction
+                    try:
+                        arc = rg.Arc(radial_circle, int_pt2, int_pt1)
+                        if arc.IsValid and arc.Radius > 0:
+                            arc_curve = rg.ArcCurve(arc)
+                            boundary_curves.append(arc_curve)
+                    except:
+                        pass
             
-            elif intersections is not None and len(intersections) == 1:
-                # Tangent case - single intersection point
-                # Include small arc around tangent point
+            elif len(intersections) == 1:
+                # Tangent case - include small arc around tangent point
                 try:
-                    # Create arc spanning both sides of tangent point
-                    center_angle = 0.5  # radians
+                    # Create small arc around the tangent point
+                    tangent_pt = intersections[0]
+                    # Get angle to tangent point
+                    vec_to_tangent = tangent_pt - radial_circle.Center
+                    angle = math.atan2(vec_to_tangent.Y, vec_to_tangent.X)
+                    
+                    # Create arc spanning around the tangent
                     arc = rg.Arc(
                         radial_circle,
-                        center_angle,
-                        center_angle + 0.1
+                        angle - 0.3,
+                        angle + 0.3
                     )
                     if arc.IsValid:
-                        boundary_arcs.append(arc)
+                        arc_curve = rg.ArcCurve(arc)
+                        boundary_curves.append(arc_curve)
                 except:
                     pass
+                    
         except Exception as ex:
             # Skip this circle if intersection fails
             pass
     
-    return boundary_arcs
+    return boundary_curves
 
 
 def get_arc_endpoints(arc):
@@ -228,43 +256,42 @@ def apply_bspline_fillet(pt1, pt2, adjacent_arc1=None, adjacent_arc2=None):
         return rg.LineCurve(pt1, pt2)
 
 
-def assemble_final_curves(boundary_arcs):
+def assemble_final_curves(boundary_curves_input):
     """
-    Assemble boundary arcs and create fillets to form continuous smooth curves.
+    Assemble boundary curves and create fillets to form continuous smooth curves.
     
     Args:
-        boundary_arcs: List of Arc3d objects representing boundary segments
+        boundary_curves_input: List of Curve objects representing boundary segments
         
     Returns:
         Tuple of (assembled_curves, fillet_curves)
     """
-    if len(boundary_arcs) < 2:
-        return (boundary_arcs, [])
-    
-    assembled_curves = []
+    assembled_curves = list(boundary_curves_input)  # Return boundary curves as-is
     fillet_curves = []
     
-    # Sort arcs by proximity to create continuous path
-    # (Simplified: assume arcs are roughly in order)
-    for i in range(len(boundary_arcs)):
-        current_arc = boundary_arcs[i]
-        next_arc = boundary_arcs[(i + 1) % len(boundary_arcs)]
+    if len(assembled_curves) < 2:
+        return (assembled_curves, fillet_curves)
+    
+    # Create fillets between consecutive curves
+    for i in range(len(assembled_curves)):
+        current_curve = assembled_curves[i]
+        next_curve = assembled_curves[(i + 1) % len(assembled_curves)]
         
-        # Get connection points
-        current_end = current_arc.EndPoint
-        next_start = next_arc.StartPoint
-        
-        # Calculate distance to find closest connection
-        dist_direct = current_end.DistanceTo(next_start)
-        dist_reverse = current_end.DistanceTo(next_arc.EndPoint)
-        
-        # Add arc to assembled curves
-        assembled_curves.append(current_arc)
-        
-        # If distance is significant, add fillet
-        if dist_direct > INTERSECTION_TOLERANCE:
-            fillet = apply_bspline_fillet(current_end, next_start, current_arc, next_arc)
-            fillet_curves.append(fillet)
+        try:
+            # Get endpoints
+            current_end = current_curve.PointAtEnd
+            next_start = next_curve.PointAtStart
+            
+            # Calculate distance between curves
+            dist = current_end.DistanceTo(next_start)
+            
+            # If curves don't connect, create fillet
+            if dist > INTERSECTION_TOLERANCE:
+                fillet = apply_bspline_fillet(current_end, next_start, current_curve, next_curve)
+                if fillet is not None:
+                    fillet_curves.append(fillet)
+        except:
+            pass
     
     return (assembled_curves, fillet_curves)
 
@@ -321,13 +348,13 @@ def main(triangle_side, point_count_A, point_count_B, point_count_C, seed=None):
         radial_circles_all.append(radial_circles)
     
     # Step 5: Extract boundary segments for each region
-    all_boundary_arcs = []
+    all_boundary_curves = []
     for i, radial_circles in enumerate(radial_circles_all):
-        boundary_arcs = extract_boundary_segments(radial_circles, region_circles, i)
-        all_boundary_arcs.extend(boundary_arcs)
+        boundary_curves = extract_boundary_segments(radial_circles, region_circles, i)
+        all_boundary_curves.extend(boundary_curves)
     
     # Step 6: Assemble and apply fillets
-    assembled_curves, fillet_curves = assemble_final_curves(all_boundary_arcs)
+    assembled_curves, fillet_curves = assemble_final_curves(all_boundary_curves)
     
     # Convert circles to curves for output
     region_curves = [rg.ArcCurve(rg.Arc(c, math.pi * 2)) for c in region_circles]
@@ -339,6 +366,9 @@ def main(triangle_side, point_count_A, point_count_B, point_count_C, seed=None):
     
     radial_curves = [rg.ArcCurve(rg.Arc(c, math.pi * 2)) for c in flat_radial_circles]
     
+    # Combine boundary and fillet curves
+    all_smooth_curves = list(assembled_curves) + list(fillet_curves)
+    
     # Return output dictionary
     output = {
         'region_circles': region_curves,
@@ -347,7 +377,8 @@ def main(triangle_side, point_count_A, point_count_B, point_count_C, seed=None):
         'points_C': points_C,
         'radial_circles': radial_curves,
         'boundary_arcs': assembled_curves,
-        'fillet_curves': fillet_curves
+        'fillet_curves': fillet_curves,
+        'all_smooth_curves': all_smooth_curves
     }
     
     return output
@@ -372,9 +403,10 @@ if __name__ == "__main__":
         points_A = result['points_A']
         points_B = result['points_B']
         points_C = result['points_C']
+        all_points = points_A + points_B + points_C  # Combined point list
         radial_circles = result['radial_circles']
         boundary_curves = result['boundary_arcs']
-        smooth_curves = result['fillet_curves']
+        smooth_curves = result['all_smooth_curves']
         
     except Exception as e:
         print("Error: {}".format(str(e)))
