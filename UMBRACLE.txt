@@ -26,3 +26,17 @@
 ------- Kinetic Thing
 
 
+1- start creating 3 circles of 70sqm, disposed on an equilateral triangle, the circles could be intersected, this intersection could be controled defining the side of the triangle
+2- populate this circles, each one of them with a number of points that can be controlled by sliders imputed on A, B, and C.
+3- draw a circle from the center of each point, from each circular region, with radious that goes randomly from 2 to 5 meters.
+4- draw the boundary of all of this circles inside of each circular region, make the curve/curve intersection of this circles, and keep the segments of the ones that are on the boundary.
+5- create a continuous curve from this circular sections, smoothing the joins with a fillet
+
+where our approach will be something close to this picture :
+3 separated continuous lines, each one from each group of circles, where I can have the inputs for the 1- Triangle side , 2- circles location, 3- the numbers of circles for each main circle (A,B,C), 6- the fillet part for the final curves where we can control the smoothness
+
+the outputs:
+1- Main 3 circles
+2- Secondry circles 
+3- the 3 boundry curves
+4- the surface of each curve indivisual 
