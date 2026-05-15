@@ -205,7 +205,7 @@ def adaptive_curve_divide(curve, division_count, proximity_field, min_distance,
 # PHASE 2: VERTICAL LINES WITH RANDOM HEIGHTS
 # ==============================================================================
 
-def create_vertical_lines(division_points_list, min_height, max_height, seed_base=12345):
+def create_vertical_lines(division_points_list, min_height, max_height, seed_base=12345, height_offsets=None):
     """
     Create vertical lines from division points with random heights.
     
@@ -214,10 +214,14 @@ def create_vertical_lines(division_points_list, min_height, max_height, seed_bas
         min_height: Minimum vertical line height
         max_height: Maximum vertical line height
         seed_base: Base random seed for reproducibility
+        height_offsets: List of height offsets per curve (default [0, 1, 2] for 1m per curve offset)
         
     Returns:
         Tuple: (all_start_points, all_end_points, line_objects)
     """
+    if height_offsets is None:
+        height_offsets = [0, 1, 2]  # Default: 1m offset per curve
+    
     random.seed(seed_base)
     start_points = []
     end_points = []
@@ -225,9 +229,14 @@ def create_vertical_lines(division_points_list, min_height, max_height, seed_bas
     
     for curve_idx, curve_points in enumerate(division_points_list):
         random.seed(seed_base + curve_idx * 1000)
+        # Get offset for this curve
+        curve_offset = height_offsets[curve_idx] if curve_idx < len(height_offsets) else 0
+        min_h = min_height + curve_offset
+        max_h = max_height + curve_offset
+        
         for point_idx, pt in enumerate(curve_points):
-            # Generate deterministic random height
-            height = min_height + random.random() * (max_height - min_height)
+            # Generate deterministic random height with curve-specific offset
+            height = min_h + random.random() * (max_h - min_h)
             
             start_pt = rg.Point3d(pt.X, pt.Y, pt.Z)
             end_pt = rg.Point3d(pt.X, pt.Y, pt.Z + height)
@@ -522,38 +531,41 @@ def clip_voronoi_cells_to_surface(voronoi_cells, surface, xy_plane_z=0.0):
         xy_plane_z: Z-height of XY plane
         
     Returns:
-        Dictionary: {cell_index: list of edge curves on surface}
+        Dictionary: {cell_index: list of (u, v, point) tuples on surface}
     """
     surface_edges = {}
     
     # Sample surface to find edges of Voronoi cells projected on surface
     u_domain = surface.Domain(0)
     v_domain = surface.Domain(1)
-    u_step = (u_domain.Max - u_domain.Min) / SURFACE_SAMPLE_DENSITY
-    v_step = (v_domain.Max - v_domain.Min) / SURFACE_SAMPLE_DENSITY
+    u_step = (u_domain.Max - u_domain.Min) / SURFACE_SAMPLE_DENSITY if SURFACE_SAMPLE_DENSITY > 1 else 1.0
+    v_step = (v_domain.Max - v_domain.Min) / SURFACE_SAMPLE_DENSITY if SURFACE_SAMPLE_DENSITY > 1 else 1.0
     
     # Map each surface sample point to nearest Voronoi cell
     cell_regions = {}
-    for i in range(voronoi_cells):
-        cell_regions[i] = []
+    for cell in voronoi_cells:
+        cell_regions[cell.index] = []
     
     u = u_domain.Min
-    while u <= u_domain.Max:
+    while u <= u_domain.Max + TOLERANCE:
         v = v_domain.Min
-        while v <= v_domain.Max:
-            pt = surface.PointAt(u, v)
-            
-            # Find nearest seed
-            min_dist = float('inf')
-            nearest_cell = -1
-            for cell in voronoi_cells:
-                dist = pt.DistanceTo(cell.seed)
-                if dist < min_dist:
-                    min_dist = dist
-                    nearest_cell = cell.index
-            
-            if nearest_cell >= 0:
-                cell_regions[nearest_cell].append((u, v, pt))
+        while v <= v_domain.Max + TOLERANCE:
+            try:
+                pt = surface.PointAt(u, v)
+                
+                # Find nearest seed
+                min_dist = float('inf')
+                nearest_cell_idx = -1
+                for cell in voronoi_cells:
+                    dist = pt.DistanceTo(cell.seed)
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest_cell_idx = cell.index
+                
+                if nearest_cell_idx >= 0 and nearest_cell_idx in cell_regions:
+                    cell_regions[nearest_cell_idx].append((u, v, pt))
+            except:
+                pass
             
             v += v_step
         u += u_step
@@ -737,6 +749,109 @@ def extrude_surface(surface, extrusion_distance, direction=None):
 
 
 # ==============================================================================
+# PHASE 9: CONNECT MIDHEIGHT POINTS TO VORONOI VERTICES
+# ==============================================================================
+
+def connect_midheight_to_voronoi(vertical_lines, voronoi_cells, midheight_fraction=0.667):
+    """
+    Connect midheight points (2/3 up vertical lines) to nearest Voronoi cell vertices.
+    
+    Args:
+        vertical_lines: List of LineCurve objects (from Phase 2)
+        voronoi_cells: List of VoronoiCell objects (from Phase 5)
+        midheight_fraction: Fraction of line height to connect from (default 2/3)
+        
+    Returns:
+        List of Line3d objects connecting midheight points to nearest Voronoi vertices
+    """
+    connection_lines = []
+    
+    if not vertical_lines or not voronoi_cells:
+        return connection_lines
+    
+    # Collect all Voronoi vertices
+    all_vertices = []
+    for cell in voronoi_cells:
+        all_vertices.extend(cell.vertices)
+    
+    if len(all_vertices) == 0:
+        return connection_lines
+    
+    # For each vertical line, find 2/3 point and connect to nearest Voronoi vertex
+    for vline in vertical_lines:
+        try:
+            # Get line endpoints
+            start_pt = vline.PointAtStart if hasattr(vline, 'PointAtStart') else vline.PointAt(vline.Domain.Min)
+            end_pt = vline.PointAtEnd if hasattr(vline, 'PointAtEnd') else vline.PointAt(vline.Domain.Max)
+            
+            # Calculate midheight point (at fraction of line height)
+            midheight_pt = rg.Point3d(
+                start_pt.X + (end_pt.X - start_pt.X) * midheight_fraction,
+                start_pt.Y + (end_pt.Y - start_pt.Y) * midheight_fraction,
+                start_pt.Z + (end_pt.Z - start_pt.Z) * midheight_fraction
+            )
+            
+            # Find nearest Voronoi vertex
+            min_dist = float('inf')
+            nearest_vertex = None
+            for vertex in all_vertices:
+                dist = midheight_pt.DistanceTo(vertex)
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_vertex = vertex
+            
+            # Create connection line
+            if nearest_vertex is not None:
+                conn_line = rg.Line(midheight_pt, nearest_vertex)
+                connection_lines.append(conn_line)
+        except Exception as e:
+            # Skip lines that fail
+            pass
+    
+    return connection_lines
+
+
+# ==============================================================================
+# PHASE 10: CREATE MULTIPIPE FROM CONNECTION LINES
+# ==============================================================================
+
+def create_multipipe(lines, radius):
+    """
+    Create pipe geometry around each line.
+    
+    Args:
+        lines: List of Line3d or Curve objects
+        radius: Pipe radius (scalar)
+        
+    Returns:
+        List of Brep objects (pipe geometry)
+    """
+    multipipe_geometry = []
+    
+    if not lines or radius <= 0:
+        return multipipe_geometry
+    
+    for line_obj in lines:
+        try:
+            # Convert to curve if it's a Line3d
+            if isinstance(line_obj, rg.Line):
+                curve = rg.LineCurve(line_obj.From, line_obj.To)
+            else:
+                curve = line_obj
+            
+            # Create pipe using Rhino's built-in function
+            pipe_brep_list = rg.Brep.CreatePipe(curve, radius, True, rg.PipeCapMode.Both, False, TOLERANCE, TOLERANCE)
+            
+            if pipe_brep_list and len(pipe_brep_list) > 0:
+                multipipe_geometry.extend(pipe_brep_list)
+        except Exception as e:
+            # Skip pipes that fail
+            pass
+    
+    return multipipe_geometry
+
+
+# ==============================================================================
 # MAIN ORCHESTRATION
 # ==============================================================================
 
@@ -770,6 +885,8 @@ def generate_volume_phase(input_curves, divisions, start_param_offset, min_dista
         'offset_edges': [],
         'wall_surfaces': [],
         'final_extrusions': [],
+        'connection_lines': [],
+        'multipipe_geometry': [],
         'errors': []
     }
     
@@ -808,11 +925,13 @@ def generate_volume_phase(input_curves, divisions, start_param_offset, min_dista
         
         # PHASE 2: Vertical Lines
         try:
+            # Apply height domain offset: [0, 1, 2]m per curve as per user requirements
+            height_offsets = [0, 1, 2]  # Each curve offset by 1m
             start_pts, end_pts, lines = create_vertical_lines(
-                division_points_list, min_height, max_height
+                division_points_list, min_height, max_height, height_offsets=height_offsets
             )
             outputs['vertical_lines'] = lines
-            outputs['errors'].append(f"Phase 2: Generated {len(lines)} vertical lines")
+            outputs['errors'].append(f"Phase 2: Generated {len(lines)} vertical lines with height offsets {height_offsets}")
         except Exception as e:
             outputs['errors'].append(f"Phase 2 Error: {str(e)}")
             # Fallback: create empty vertical lines list to continue
@@ -908,6 +1027,30 @@ def generate_volume_phase(input_curves, divisions, start_param_offset, min_dista
                 outputs['errors'].append("Phase 6-8: Skipped (missing surface or Voronoi cells)")
         except Exception as e:
             outputs['errors'].append(f"Phase 6-8 Critical Error: {str(e)}")
+        
+        # PHASE 9: Connect Midheight Points to Voronoi Vertices
+        try:
+            if outputs['vertical_lines'] and len(outputs['vertical_lines']) > 0 and voronoi_cells:
+                connection_lines = connect_midheight_to_voronoi(outputs['vertical_lines'], voronoi_cells)
+                outputs['connection_lines'] = connection_lines
+                outputs['errors'].append(f"Phase 9: Created {len(connection_lines)} connection lines from midheight points to Voronoi vertices")
+            else:
+                outputs['errors'].append("Phase 9: Skipped (missing vertical lines or Voronoi cells)")
+        except Exception as e:
+            outputs['errors'].append(f"Phase 9 Error: {str(e)}")
+        
+        # PHASE 10: Create Multipipe from Connection Lines
+        try:
+            if 'connection_lines' in outputs and len(outputs.get('connection_lines', [])) > 0:
+                # Use multipipe_radius if available, else default
+                pipe_radius = 0.3  # Default radius
+                multipipe_geom = create_multipipe(outputs['connection_lines'], pipe_radius)
+                outputs['multipipe_geometry'] = multipipe_geom
+                outputs['errors'].append(f"Phase 10: Created {len(multipipe_geom)} pipe objects with radius {pipe_radius}")
+            else:
+                outputs['errors'].append("Phase 10: Skipped (no connection lines from Phase 9)")
+        except Exception as e:
+            outputs['errors'].append(f"Phase 10 Error: {str(e)}")
     
     except Exception as e:
         outputs['errors'].append(f"Critical Error in main loop: {str(e)}")
@@ -995,59 +1138,72 @@ if __name__ == "__main__":
     offset_edges = []
     wall_surfaces = []
     final_extrusions = []
+    multipipe_geometry = []
+    connection_lines = []
     error_messages = ""
     
     try:
-        # STEP 1: Get input curves
+        # Read Grasshopper inputs with defaults
+        input_curves_raw = input_curves if 'input_curves' in dir() else []
+        divisions = int(divisions) if 'divisions' in dir() else 10
+        start_param_offset = float(start_param_offset) if 'start_param_offset' in dir() else 0.0
+        min_distance = float(min_distance) if 'min_distance' in dir() else 1.0
+        max_distance = float(max_distance) if 'max_distance' in dir() else 5.0
+        min_height = float(min_height) if 'min_height' in dir() else 5.0
+        max_height = float(max_height) if 'max_height' in dir() else 20.0
+        voronoi_offset = float(voronoi_offset) if 'voronoi_offset' in dir() else 0.5
+        extrusion_distance = float(extrusion_distance) if 'extrusion_distance' in dir() else 5.0
+        multipipe_radius = float(multipipe_radius) if 'multipipe_radius' in dir() else 0.3
+        
+        # Normalize input curves to list of 3
         curves = []
-        if 'input_curves' in dir():
-            if isinstance(input_curves, (list, tuple)):
-                curves = list(input_curves)
-            else:
-                curves = [input_curves]
+        if isinstance(input_curves_raw, (list, tuple)):
+            curves = list(input_curves_raw)
+        elif input_curves_raw is not None:
+            curves = [input_curves_raw]
         
-        error_messages = "DEBUG: Found {} curves\n".format(len(curves))
-        
+        # Pad/trim to exactly 3 curves
         if len(curves) < 3:
-            error_messages += "ERROR: Need 3 curves, got {}".format(len(curves))
+            error_messages += "WARNING: Expected 3 curves, got {}\\n".format(len(curves))
+        curves = curves[:3]
+        
+        if len(curves) == 0:
+            error_messages += "ERROR: No input curves provided\\n"
         else:
-            # STEP 2: Simple division of curves  
-            div_count = int(divisions) if 'divisions' in dir() else 10
-            error_messages += "DEBUG: div_count = {}\n".format(div_count)
+            error_messages += "INFO: Processing {} curves\\n".format(len(curves))
+            error_messages += "  divisions={}, start_param={}, min_dist={}, max_dist={}\\n".format(
+                divisions, start_param_offset, min_distance, max_distance)
+            error_messages += "  min_height={}, max_height={}, voronoi_offset={}, extrusion={}\\n".format(
+                min_height, max_height, voronoi_offset, extrusion_distance)
             
-            for curve_idx, curve in enumerate(curves[:3]):
-                try:
-                    domain = curve.Domain
-                    error_messages += "Curve {}: domain min={}, max={}\n".format(curve_idx, domain.Min, domain.Max)
-                    
-                    for i in range(div_count):
-                        t = domain.Min + (i / (div_count - 1)) * (domain.Max - domain.Min) if div_count > 1 else 0.5
-                        pt = curve.PointAt(t)
-                        division_points.append(pt)
-                        error_messages += "  Point {}: ({}, {}, {})\n".format(i, pt.X, pt.Y, pt.Z)
-                except Exception as e:
-                    error_messages += "ERROR Curve {}: {}\n".format(curve_idx, str(e))
+            # Call main orchestration function
+            results = generate_volume_phase(
+                curves, divisions, start_param_offset, min_distance, max_distance,
+                min_height, max_height, voronoi_offset, extrusion_distance
+            )
             
-            error_messages += "\nSUCCESS: Generated {} division points from {} curves".format(len(division_points), len(curves))
+            # Extract outputs
+            division_points = results.get('division_points', [])
+            vertical_lines = results.get('vertical_lines', [])
+            lofted_surface = results.get('lofted_surface', None)
+            extended_surface = results.get('extended_surface', None)
+            voronoi_cells = results.get('voronoi_cells', [])
+            voronoi_edges = results.get('voronoi_edges', [])
+            offset_edges = results.get('offset_edges', [])
+            wall_surfaces = results.get('wall_surfaces', [])
+            final_extrusions = results.get('final_extrusions', [])
+            connection_lines = results.get('connection_lines', [])
+            multipipe_geometry = results.get('multipipe_geometry', [])
             
-            # TODO: PHASE 2 - Vertical lines (commented out for now)
-            # vertical_lines = []
-            # TODO: PHASE 3 - Lofted surface (commented out for now)
-            # lofted_surface = None
-            # TODO: PHASE 4 - Extended surface (commented out for now)
-            # extended_surface = None
-            # TODO: PHASE 5 - Voronoi edges (commented out for now)
-            # voronoi_edges = []
-            # TODO: PHASE 6 - Offset edges (commented out for now)
-            # offset_edges = []
-            # TODO: PHASE 7 - Wall surfaces (commented out for now)
-            # wall_surfaces = []
-            # TODO: PHASE 8 - Final extrusions (commented out for now)
-            # final_extrusions = []
+            # Append error messages from results
+            for msg in results.get('errors', []):
+                error_messages += msg + "\\n"
+            
+            error_messages += "\\n=== EXECUTION COMPLETE ==="
     
     except Exception as e:
         import traceback
-        error_messages = "CRITICAL: {}\n{}".format(str(e), traceback.format_exc())
+        error_messages += "CRITICAL ERROR: {}\\n{}".format(str(e), traceback.format_exc())
 else:
     # Fallback if not in main
     division_points = []
@@ -1058,6 +1214,8 @@ else:
     offset_edges = []
     wall_surfaces = []
     final_extrusions = []
+    connection_lines = []
+    multipipe_geometry = []
     error_messages = "Not in main context"
 
 
