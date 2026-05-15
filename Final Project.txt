@@ -1,0 +1,28 @@
+Goal:
+create an umbracle for a botanic inner space, for different range of interior plants.
+Using fractal geometry for the structure and the shading elements.
+the shading elements should be kinetic, the motion of these elements allow to control the inner light, temperature.
+the space is divided by areas to accomodate different plant species: tropical, mediterranean and desertic species
+
+tropical plants:
+temp: 15º night/25º day
+hum: 70%
+light hours: 10 to 12
+
+desertic plants:
+temp: 12º at night/ 30º day
+hum: 30%
+light hours: 6 to 8
+
+mediterranean:
+temp: temp: 15º night/25º day
+hum: 50%
+light hours: 6 t0 10
+
+Pseudocode:
+
+1- start creating 3 circles of 70sqm, disposed on an equilateral triangle, the circles could be intersected, this intersection could be controled defining the side of the triangle
+2- populate this circles, each one of them with a number of points that can  be controlled by sliders imputed on A, B, and C.
+3- draw a circle from the center of each point, from each circular region, with radious that goes randomly from 2 to 5 meters.
+4- draw the boundary of all of this circles inside of each circular region, make the curve/curve intersection of this circles, and keep the segments of the ones that are on the boundary.
+5- create a continous curve from this circular sections, smoothing the joins with a fillet
