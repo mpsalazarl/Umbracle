@@ -1,0 +1,11 @@
+ID,Type,Common_Name,Scientific_Name,Climate,Avg_Height_m,Canopy_Diameter_m,Root_Spread_m,Growth_Rate,Water_Needs,Sun_Exposure,Leaf_Type,Trunk_Diameter_cm,Recommended_Spacing_m,Canopy_Shape,Color_R,Color_G,Color_B,Density,Wind_Resistance,Soil_Type
+1,Tree,Olive Tree,Olea europaea,Mediterranean,10.0,8.0,6.0,Slow,Low,Full Sun,Evergreen,80,7.0,Round,107,142,35,Medium,High,Rocky
+2,Tree,Italian Cypress,Cupressus sempervirens,Mediterranean,20.0,3.0,3.0,Medium,Low,Full Sun,Evergreen,50,3.0,Columnar,34,139,34,Dense,Very High,Well-drained
+3,Tree,Stone Pine,Pinus pinea,Mediterranean,18.0,12.0,8.0,Medium,Low,Full Sun,Evergreen,100,10.0,Umbrella,85,107,47,Medium,High,Sandy
+4,Tree,Carob Tree,Ceratonia siliqua,Mediterranean,12.0,10.0,7.0,Slow,Very Low,Full Sun,Evergreen,90,8.0,Wide,107,142,35,Dense,High,Dry Soil
+5,Tree,Mediterranean Fan Palm,Chamaerops humilis,Mediterranean,5.0,4.0,3.0,Slow,Low,Full Sun,Evergreen,30,4.0,Fan,154,205,50,Dense,High,Rocky
+6,Shrub,Lavender,Lavandula angustifolia,Mediterranean,1.0,1.2,0.8,Medium,Very Low,Full Sun,Evergreen,2,1.0,Rounded,186,85,211,Medium,Medium,Well-drained
+7,Shrub,Rosemary,Salvia rosmarinus,Mediterranean,1.5,1.5,1.0,Fast,Low,Full Sun,Evergreen,3,1.2,Bushy,34,139,34,Dense,High,Rocky
+8,Shrub,Oleander,Nerium oleander,Mediterranean,4.0,3.0,2.0,Fast,Low,Full Sun,Evergreen,10,3.0,Spreading,255,105,180,Medium,Medium,Sandy
+9,Shrub,Myrtle,Myrtus communis,Mediterranean,3.0,2.0,1.5,Medium,Low,Partial Sun,Evergreen,8,2.0,Compact,60,179,113,Dense,Medium,Well-drained
+10,Shrub,Rockrose,Cistus ladanifer,Mediterranean,2.0,2.0,1.5,Fast,Very Low,Full Sun,Evergreen,5,1.5,Rounded,144,238,144,Medium,High,Dry Soil

@@ -1,0 +1,11 @@
+ID,Type,Common_Name,Scientific_Name,Climate,Avg_Height_m,Canopy_Diameter_m,Root_Spread_m,Growth_Rate,Water_Needs,Sun_Exposure,Leaf_Type,Trunk_Diameter_cm,Recommended_Spacing_m,Canopy_Shape,Color_R,Color_G,Color_B,Density,Wind_Resistance,Soil_Type
+1,Tree,Royal Palm,Roystonea regia,Tropical,20.0,6.0,4.0,Fast,Medium,Full Sun,Evergreen,50,8.0,Oval,34,139,34,Medium,High,Well-drained
+2,Tree,Coconut Palm,Cocos nucifera,Tropical,25.0,5.0,5.0,Fast,Medium,Full Sun,Evergreen,40,8.0,Umbrella,46,139,87,Low,High,Sandy
+3,Tree,Rain Tree,Samanea saman,Tropical,18.0,20.0,10.0,Fast,Medium,Full Sun,Semi-evergreen,120,15.0,Wide,60,179,113,High,Medium,Loamy
+4,Tree,Frangipani,Plumeria rubra,Tropical,8.0,5.0,3.0,Medium,Low,Full Sun,Deciduous,30,5.0,Round,107,142,35,Low,Medium,Well-drained
+5,Tree,Golden Bamboo,Phyllostachys aurea,Tropical,10.0,4.0,6.0,Very Fast,High,Partial Sun,Evergreen,10,3.0,Vertical,154,205,50,High,Low,Moist
+6,Shrub,Heliconia,Heliconia rostrata,Tropical,3.0,2.0,1.5,Fast,High,Partial Sun,Evergreen,5,2.0,Vertical,220,20,60,Dense,Low,Moist
+7,Shrub,Hibiscus,Hibiscus rosa-sinensis,Tropical,2.5,2.0,1.5,Medium,Medium,Full Sun,Evergreen,4,2.0,Round,178,34,34,Medium,Medium,Well-drained
+8,Shrub,Bougainvillea,Bougainvillea spectabilis,Tropical,4.0,3.0,2.0,Fast,Low,Full Sun,Semi-evergreen,6,3.0,Spreading,186,85,211,Medium,Medium,Sandy
+9,Shrub,Croton,Codiaeum variegatum,Tropical,2.0,1.5,1.0,Medium,Medium,Partial Sun,Evergreen,3,1.5,Compact,255,140,0,Dense,Low,Well-drained
+10,Shrub,Bird of Paradise,Strelitzia reginae,Tropical,1.8,1.5,1.0,Medium,Medium,Full Sun,Evergreen,2,1.5,Fan,70,130,180,Medium,Medium,Rich Soil

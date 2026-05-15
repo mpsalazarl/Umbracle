@@ -1,3 +1,10 @@
+NOTE: each stage was detailed described and edited according to the errors and workflow 
+This txt gives the GENERAL idea of the created Geometry which has ( 3 controlled area for 3 different types of plants covered with a voronoi shell design goes down as umbracle and the shell has a kinetic triangle meshes)
+The python files are for some parts of the grasshopper file which show how we can connect a python file from vsc to grasshopper directly 
+and because of the complexity in the file, the regular python component was used 
+
+REGARDS :)
+
 Goal:
 create an umbracle for a botanic inner space, for different range of interior plants.
 Using fractal geometry for the structure and the shading elements.
@@ -19,10 +26,32 @@ temp: temp: 15º night/25º day
 hum: 50%
 light hours: 6 t0 10
 
-Pseudocode:
+-------- Area
 
 1- start creating 3 circles of 70sqm, disposed on an equilateral triangle, the circles could be intersected, this intersection could be controled defining the side of the triangle
 2- populate this circles, each one of them with a number of points that can  be controlled by sliders imputed on A, B, and C.
 3- draw a circle from the center of each point, from each circular region, with radious that goes randomly from 2 to 5 meters.
 4- draw the boundary of all of this circles inside of each circular region, make the curve/curve intersection of this circles, and keep the segments of the ones that are on the boundary.
 5- create a continous curve from this circular sections, smoothing the joins with a fillet
+
+
+
+
+-------- Volume 
+
+1- Divide the three curves given (contained in the xy plane) in even numbers (controlled by an input slider), make the distances between them non uniform depending on the proximity to the other curves (make the largest distance on the part that is close to the other ones) with an input slider for the starting point for the division and another input for a domain for the minimum and maximum distance
+2- Make a vertical line from each point with a random height in a domain starting and ending from input sliders. There will be a difference of 1m on the domain of each curve.
+3- Make a surface with the end points of this vertical lines (the ones that are not in the xy plane). U number will be 20
+4. Extend the surface following it is own curvature until it cuts the xy plane
+5. Make a Voronoi tesellation on the surface with the points you used to build the surface
+6. Take the edges of the Voronoi tesellation and offset them in the surface, distance given by an slider.
+7. Create the surface between the original edges and the offset ones
+8. Extrude this surface a distance controlled with an slider
+9. Divide the vertical lines (in step 2) in three parts. Take the point that is 2/3 height and join it with the vertices of the Voronoi face that is closer to it.
+10. Make multipipe with these lines that you have just drawn.
+
+
+------- Kinetic Thing
+
+1- Create a triangle shell from the centers of the closed voronoi to the corner points from the same one
+2- do the motion for the corner points that is located in the voronoi that has only 6 corner points ( with a controlled center points for the height and locatiob)

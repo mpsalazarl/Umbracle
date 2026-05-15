@@ -1,0 +1,11 @@
+ID,Type,Common_Name,Scientific_Name,Climate,Avg_Height_m,Canopy_Diameter_m,Root_Spread_m,Growth_Rate,Water_Needs,Sun_Exposure,Leaf_Type,Trunk_Diameter_cm,Recommended_Spacing_m,Canopy_Shape,Color_R,Color_G,Color_B,Density,Wind_Resistance,Soil_Type
+1,Tree,Date Palm,Phoenix dactylifera,Desert,18.0,6.0,5.0,Medium,Low,Full Sun,Evergreen,60,8.0,Oval,107,142,35,Medium,High,Sandy
+2,Tree,Desert Willow,Chilopsis linearis,Desert,9.0,5.0,4.0,Fast,Low,Full Sun,Deciduous,35,5.0,Round,144,238,144,Low,Medium,Well-drained
+3,Tree,Acacia,Acacia tortilis,Desert,12.0,10.0,8.0,Medium,Very Low,Full Sun,Evergreen,70,10.0,Umbrella,85,107,47,Medium,High,Sandy
+4,Tree,Palo Verde,Parkinsonia florida,Desert,10.0,7.0,5.0,Fast,Very Low,Full Sun,Deciduous,40,6.0,Wide,154,205,50,Low,High,Rocky
+5,Tree,Joshua Tree,Yucca brevifolia,Desert,12.0,4.0,3.0,Slow,Very Low,Full Sun,Evergreen,50,5.0,Irregular,107,142,35,Low,High,Dry Sandy
+6,Shrub,Agave,Agave americana,Desert,2.0,2.0,1.5,Slow,Very Low,Full Sun,Evergreen,5,2.0,Rosette,124,252,0,Dense,High,Rocky
+7,Shrub,Prickly Pear,Opuntia ficus-indica,Desert,3.0,3.0,2.0,Medium,Very Low,Full Sun,Evergreen,8,3.0,Spreading,34,139,34,Medium,High,Sandy
+8,Shrub,Creosote Bush,Larrea tridentata,Desert,2.5,2.5,2.0,Slow,Very Low,Full Sun,Evergreen,6,2.5,Round,85,107,47,Dense,Very High,Gravel
+9,Shrub,Ocotillo,Fouquieria splendens,Desert,5.0,3.0,2.0,Medium,Low,Full Sun,Semi-evergreen,10,3.0,Vertical,160,82,45,Low,High,Rocky
+10,Shrub,Aloe Vera,Aloe barbadensis miller,Desert,1.0,1.0,0.8,Medium,Low,Full Sun,Evergreen,2,1.0,Rosette,50,205,50,Dense,Medium,Sandy
